@@ -33,7 +33,7 @@ export class MrauCdkStack extends cdk.Stack {
     cloudWatchRole.addManagedPolicy(policy);
 
     const s3Integration = this.createS3Integration(documentsBucket, executeRole)
-    this.addDocumentsEndpoint(apiGateway, s3Integration);
+    this.addDocumentsGetEndpoint(apiGateway, s3Integration);
 
     // Enable API log group
     const stage = apiGateway.deploymentStage!.node.defaultChild as apigw.CfnStage;
@@ -43,45 +43,6 @@ export class MrauCdkStack extends cdk.Stack {
 
     this.addApiAccessLogSettings(stage, logGroup)
     logGroup.grantWrite(new ServicePrincipal('apigateway.amazonaws.com'));
-
-    // #### Pets lambdas ####
-    // PetCreateHandler POST lambda
-    // const PetCreateHandler = new lambda.Function(this, 'PetCreateHandler', {
-    //   runtime: lambda.Runtime.RUBY_2_7,
-    //   handler: 'index.handler',
-    //   memorySize: 1024,
-    //   code: lambda.Code.fromAsset('lib/lambdas/pets/create/'),
-    //   timeout: cdk.Duration.seconds(3)
-    // });
-
-    // // PetUpdateHandler PATCH lambda
-    // const PetUpdateHandler = new lambda.Function(this, 'PetUpdateHandler', {
-    //   runtime: lambda.Runtime.RUBY_2_7,
-    //   handler: 'index.handler',
-    //   memorySize: 1024,
-    //   code: lambda.Code.fromAsset('lib/lambdas/pets/update/'),
-    //   timeout: cdk.Duration.seconds(3)
-    // });
-
-    // // PetDeleteHandler DELETE lambda
-    // const PetDeleteHandler = new lambda.Function(this, 'PetDeleteHandler', {
-    //   runtime: lambda.Runtime.RUBY_2_7,
-    //   handler: 'index.handler',
-    //   memorySize: 1024,
-    //   code: lambda.Code.fromAsset('lib/lambdas/pets/delete/'),
-    //   timeout: cdk.Duration.seconds(3)
-    // });
-
-    // // PetDeleteHandler GET lambda
-    // const PetGetHandler = new lambda.Function(this, 'PetGetHandler', {
-    //   runtime: lambda.Runtime.RUBY_2_7,
-    //   handler: 'index.handler',
-    //   memorySize: 1024,
-    //   code: lambda.Code.fromAsset('lib/lambdas/pets/get/'),
-    //   timeout: cdk.Duration.seconds(3)
-    // });
-    // #### News lambdas ####
-    // TODO
   }
 
   private createBucketForDocuments() {
@@ -105,7 +66,7 @@ export class MrauCdkStack extends cdk.Stack {
   }
 
   private createExecutionRole(bucket: IBucket) {
-    const executeRole = new Role(this, "api-gateway-s3-assume-tole", {
+    const executeRole = new Role(this, "api-gateway-s3-assume-role", {
       assumedBy: new ServicePrincipal("apigateway.amazonaws.com"),
       roleName: "API-Gateway-S3-Integration-Role",
     });
@@ -113,7 +74,7 @@ export class MrauCdkStack extends cdk.Stack {
     executeRole.addToPolicy(
       new PolicyStatement({
         resources: [bucket.bucketArn],
-        actions: ["s3:Get", 's3:Put', 's3:Delete'],
+        actions: ['s3:Get', 's3:Put', 's3:Delete', 's3:DeleteObject', 's3:GetObject', 's3:PutObject', 's3:ListBucket'],
       })
     );
 
@@ -139,43 +100,40 @@ export class MrauCdkStack extends cdk.Stack {
     return new apigw.AwsIntegration({
       service: 's3',
       integrationHttpMethod: 'GET',
-      path: `${documentsBucket.bucketName}/{folder}/{key}`,
+      path: '{bucket}',
       options: {
         credentialsRole: executeRole,
         integrationResponses: [
           {
             statusCode: '200',
             responseParameters: {
-              'method.response.header.Content-Type': 'integration.response.header.Content-Type',
+              'method.response.header.Content-Type': 'integration.response.header.Content-Type'
             },
-          },
+          }
         ],
         requestParameters: {
-          'integration.request.path.folder': 'method.request.path.folder',
-          'integration.request.path.key': 'method.request.path.key',
+          'integration.request.path.bucket': 'method.request.path.folder'
         },
       },
     });
   }
 
-  private addDocumentsEndpoint(apiGateway: apigw.RestApi, s3Integration: apigw.AwsIntegration) {
-    apiGateway.root
-      .addResource('assets')
-      .addResource("{folder}")
-      .addResource("{key}")
-      .addMethod('GET', s3Integration, {
+  private addDocumentsGetEndpoint(apiGateway: apigw.RestApi, s3GetIntegration: apigw.AwsIntegration) {
+    apiGateway
+      .root
+      .addResource('{folder}')
+      .addMethod('GET', s3GetIntegration, {
         methodResponses: [
           {
             statusCode: '200',
             responseParameters: {
-              'method.response.header.Content-Type': true,
+              'method.response.header.Content-Type': true
             },
           },
         ],
         requestParameters: {
           'method.request.path.folder': true,
-          'method.request.path.key': true,
-          'method.request.header.Content-Type': true,
+          'method.request.header.Content-Type': true
         },
       });
   }
@@ -197,6 +155,8 @@ export class MrauCdkStack extends cdk.Stack {
         httpMethod: '$context.httpMethod',
         path: '$context.path',
         status: '$context.status',
+        errorMessage: '$context.error.message',
+        errorMessageString: '$context.error.messageString',
         responseLength: '$context.responseLength',
       }),
     };
