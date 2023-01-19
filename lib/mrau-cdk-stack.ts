@@ -32,7 +32,7 @@ export class MrauCdkStack extends cdk.Stack {
     const policy = this.createCloudWatchManagedPolicy()
     cloudWatchRole.addManagedPolicy(policy);
 
-    const s3Integration = this.createS3GetIntegration(documentsBucket, executeRole)
+    const s3Integration = this.createS3Integration(documentsBucket, executeRole)
     this.addDocumentsGetEndpoint(apiGateway, s3Integration);
 
     // Enable API log group
@@ -96,7 +96,7 @@ export class MrauCdkStack extends cdk.Stack {
     );
   }
 
-  private createS3GetIntegration(documentsBucket: IBucket, executeRole: Role) {
+  private createS3Integration(documentsBucket: IBucket, executeRole: Role) {
     return new apigw.AwsIntegration({
       service: 's3',
       integrationHttpMethod: 'GET',
