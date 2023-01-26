@@ -12,6 +12,9 @@ import {
   PolicyStatement,
   ServicePrincipal
 } from 'aws-cdk-lib/aws-iam';
+import * as cloudfront from 'aws-cdk-lib/aws-cloudfront';
+import { S3Origin} from 'aws-cdk-lib/aws-cloudfront-origins';
+
 
 export class MrauCdkStack extends cdk.Stack {
   constructor(scope: Construct, id: string, props?: cdk.StackProps) {
@@ -19,6 +22,11 @@ export class MrauCdkStack extends cdk.Stack {
 
     // S3 Bucket for documents
     const documentsBucket = this.createBucketForDocuments();
+
+    // S3 Bucket for public website
+    const websiteBucket = this.createBucketForWebsite()
+    this.enableWebsiteHosting(websiteBucket)
+    this.createCloudFrontDistribution(websiteBucket)
 
     // API Gateway
     const apiGateway = this.createAPIGateway();
@@ -49,6 +57,32 @@ export class MrauCdkStack extends cdk.Stack {
     return new Bucket(this, 'MrauDokumenty', {
       blockPublicAccess: BlockPublicAccess.BLOCK_ALL,
       bucketName: "mrau-dokumenty",
+    });
+  }
+
+  private createBucketForWebsite() {
+    return new Bucket(this, 'MrauWebsite', {
+      blockPublicAccess: BlockPublicAccess.BLOCK_ALL,
+      bucketName: "mrau-website"
+    });
+  }
+
+  private enableWebsiteHosting(bucket: IBucket) {
+    new BucketDeployment(this, 'mrau-website-deployment', {
+      sources: [Source.asset('lib/static-assets')],
+      destinationBucket: bucket
+    });
+  }
+
+  private createCloudFrontDistribution(bucket: IBucket) {
+    new cloudfront.Distribution(this, 'mrau-distribution', {
+      defaultBehavior: {
+        origin: new S3Origin(bucket),
+        viewerProtocolPolicy: cloudfront.ViewerProtocolPolicy.REDIRECT_TO_HTTPS,
+        compress: true
+      },
+      defaultRootObject: 'index.html',
+      comment: 'Cloud Front distribution for Mrau Website S3 backet'
     });
   }
 
